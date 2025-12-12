@@ -6,17 +6,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from typing import List
 import logging
+import os
 
-# =========================
-# LOGGING
-# =========================
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# =========================
-# CARGA DEL MODELO (PIPELINE COMPLETO)
-# =========================
-ARTIFACT_PATH = Path("best_model_artifact.pkl")
+MODEL_PATH = os.getenv("MODEL_PATH", "best_model_artifact.pkl")
+ARTIFACT_PATH = Path(MODEL_PATH)
 
 try:
     if not ARTIFACT_PATH.exists():
@@ -36,9 +32,6 @@ except Exception as e:
     logger.error(f"Error cargando el modelo: {e}")
     raise
 
-# =========================
-# SCHEMAS PYDANTIC V2
-# =========================
 class DailyFeatures(BaseModel):
 
     open_prev_day: float
@@ -58,7 +51,6 @@ class DailyFeatures(BaseModel):
     day_of_week: int = Field(..., ge=0, le=6)
     month: int = Field(..., ge=1, le=12)
 
-    # ✅ VALIDADORES V2
     @field_validator("open_prev_day", "high_prev_day", "low_prev_day", "close_prev_day")
     @classmethod
     def validate_prices(cls, v):
@@ -118,9 +110,6 @@ class ModelInfo(BaseModel):
     numeric_features: List[str]
     categorical_features: List[str]
 
-# =========================
-# FASTAPI APP
-# =========================
 app = FastAPI(
     title="Stock Direction Prediction API",
     description="API para predecir la dirección del precio de acciones",
@@ -129,9 +118,6 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# =========================
-# CORS
-# =========================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -140,9 +126,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# =========================
-# ENDPOINTS
-# =========================
+
 @app.get("/health")
 def health_check():
     return {
@@ -169,7 +153,6 @@ def predict_single(features: DailyFeatures):
         data_dict = features.model_dump()
         df_input = pd.DataFrame([data_dict], columns=feature_cols)
 
-        # PREDICCIÓN DIRECTA CON PIPELINE (SIN TRANSFORM EXTRA)
         y_pred = model.predict(df_input)[0]
 
         try:
@@ -217,9 +200,6 @@ def get_example_features():
     return DailyFeatures.Config.json_schema_extra["example"]
 
 
-# =========================
-# RUN LOCAL
-# =========================
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

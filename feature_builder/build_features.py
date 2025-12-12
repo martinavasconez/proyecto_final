@@ -9,11 +9,11 @@ from psycopg2.extras import execute_values
 def get_connection():
     try:
         return psycopg2.connect(
-            host=os.getenv("PG_HOST", "postgres"),
-            port=os.getenv("PG_PORT", "5432"),
-            dbname=os.getenv("PG_DB", "trading_db"),
-            user=os.getenv("PG_USER", "root"),
-            password=os.getenv("PG_PASSWORD", "root"),
+            host=os.getenv("PG_HOST"),
+            port=os.getenv("PG_PORT"),
+            dbname=os.getenv("PG_DB"),
+            user=os.getenv("PG_USER"),
+            password=os.getenv("PG_PASSWORD"),
         )
     except Exception as e:
         print("Error conectando a Postgres:", str(e))

@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    container_name: trading-postgres
+    environment:
+      - POSTGRES_USER=${PG_USER:-root}
+      - POSTGRES_PASSWORD=${PG_PASSWORD:-root}
+      - POSTGRES_DB=${PG_DB:-trading_db}
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data:rw
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    networks:
+      - trading-network
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: trading-pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL:-admin@admin.com}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD:-admin}
+    volumes:
+      - ./pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "${PGADMIN_PORT:-8081}:80"
+    networks:
+      - trading-network
+
+  jupyter-notebook:
+    image: jupyter/scipy-notebook:latest
+    container_name: trading-jupyter
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      # Postgres connection variables
+      - PG_HOST=${PG_HOST:-postgres}
+      - PG_PORT=${PG_PORT:-5432}
+      - PG_DB=${PG_DB:-trading_db}
+      - PG_USER=${PG_USER:-root}
+      - PG_PASSWORD=${PG_PASSWORD:-root}
+      - PG_SCHEMA_RAW=${PG_SCHEMA_RAW:-raw}
+      - PG_SCHEMA_ANALYTICS=${PG_SCHEMA_ANALYTICS:-analytics}
+      # Market ingestion parameters
+      - TICKERS=${TICKERS:-AAPL}
+      - START_DATE=${START_DATE:-2021-01-01}
+      - END_DATE=${END_DATE:-2025-11-29}
+      - DATA_PROVIDER=${DATA_PROVIDER:-yfinance}
+      - RUN_ID=${RUN_ID:-run_001}
+    user: root
+    command: >
+      bash -c "
+      pip install yfinance psycopg2-binary sqlalchemy pandas numpy scikit-learn &&
+      start-notebook.sh --NotebookApp.token='' --NotebookApp.password=''
+      "
+    networks:
+      - trading-network
+    depends_on:
+      - postgres
+
+  feature-builder:
+    build:
+      context: ./feature_builder
+      dockerfile: Dockerfile
+    container_name: trading-feature-builder
+    environment:
+      # Postgres connection
+      - PG_HOST=${PG_HOST:-postgres}
+      - PG_PORT=${PG_PORT:-5432}
+      - PG_DB=${PG_DB:-trading_db}
+      - PG_USER=${PG_USER:-root}
+      - PG_PASSWORD=${PG_PASSWORD:-root}
+      - PG_SCHEMA_RAW=${PG_SCHEMA_RAW:-raw}
+      - PG_SCHEMA_ANALYTICS=${PG_SCHEMA_ANALYTICS:-analytics}
+      # Feature builder parameters
+      - TICKERS=${TICKERS:-AAPL}
+      - START_DATE=${START_DATE:-2021-01-01}
+      - END_DATE=${END_DATE:-2025-11-29}
+      - RUN_ID=${RUN_ID:-run_001}
+    networks:
+      - trading-network
+    depends_on:
+      - postgres
+    profiles:
+      - manual
+
+  model-api:
+    build:
+      context: ./stock_api
+      dockerfile: Dockerfile
+    container_name: trading-model-api
+    environment:
+      API_PORT: ${API_PORT:-8000}
+      MODEL_PATH: ${MODEL_PATH:-best_model_artifact.pkl}
+
+    volumes:
+      - ./stock_api:/app
+    ports:
+      - "${API_PORT:-8000}:8000"
+    networks:
+      - trading-network
+    depends_on:
+      - postgres
+
+networks:
+  trading-network:
+    driver: bridge
